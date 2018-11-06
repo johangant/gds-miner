@@ -1,7 +1,7 @@
 import scrapy
 
-class GdsSpider(scrapy.Spider):
-    name = 'gdsspider'
+class GdsMinder(scrapy.Spider):
+    name = 'gdsminer'
     start_urls = ['https://www.digitalmarketplace.service.gov.uk/digital-outcomes-and-specialists/opportunities?q=&lot=digital-outcomes&statusOpenClosed=open']
 
     def parse(self, response):
