@@ -1,12 +1,21 @@
 import scrapy
 import json
 import requests
+from simplegist import Simplegist
 from html_sanitizer import Sanitizer
 
 class GdsMiner(scrapy.Spider):
     name = 'gdsminer'
     start_urls = ['https://www.digitalmarketplace.service.gov.uk/digital-outcomes-and-specialists/opportunities?q=&lot=digital-outcomes&statusOpenClosed=open']
-    opportunities = []
+    gist_id = 'fa6713097f9ab2b9af7c319930c353e3'
+    gist_token = 'd12935036b674103da959061889c5247b46b1949'
+    ghuser = 'johangant'
+    known_opportunities = []
+    found_opportunities = []
+    new_opportunities = []
+
+    gist = Simplegist(username=ghuser, api_token=gist_token)
+    known_opportunities = gist.profile().content(id=gist_id).split()
 
     def parse(self, response):
         results = []
@@ -20,10 +29,25 @@ class GdsMiner(scrapy.Spider):
                 'page_url': page_url,
             })
 
+        if results is None:
+            print "No results found"
+            sys.exit(1)
+
         for item in results:
-            opportunity_url = item['page_url']
+            opportunity_url = response.urljoin(item['page_url'])
             if opportunity_url is not None:
-                yield response.follow(opportunity_url, callback=self.parse_opportunity)
+                # Track all opportunities we pass.
+                self.found_opportunities.append(opportunity_url)
+
+                # If it's new, then parse it and handle it accordingly.
+                if opportunity_url not in self.known_opportunities:
+                    self.new_opportunities.append(opportunity_url)
+                    yield response.follow(opportunity_url, callback=self.parse_opportunity)
+
+        if len(self.new_opportunities) > 0:
+            # Update the gist with each pass with all opportunities we've found. Better in future to
+            # do this at the very end as otherwise we access the GitHub API for every page.
+            self.gist.profile().edit(id=self.gist_id, content="\n".join(self.found_opportunities))
 
         # Jump to next page, if we have one.
         next_page = response.css('ul.previous-next-navigation li.next a::attr(href)').extract_first()
@@ -51,8 +75,6 @@ class GdsMiner(scrapy.Spider):
         })
 
     def store_opportunity(self, opportunity):
-        webhook_url = 'https://hooks.zapier.com/hooks/catch/4077741/ejn6bw/'
-
         response = requests.post(
             webhook_url, data=json.dumps(opportunity),
             headers={'Content-Type': 'application/json'}
